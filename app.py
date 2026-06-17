@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Groq Resume Parser — API Server
-Flask API for parsing resumes using Llama 3.1 via Groq.
+Gemma 4 Resume Parser — API Server
+Flask API for parsing resumes using Google's Gemma 4 (via Google AI Studio).
 Supports single file, bulk upload (up to 50), CSV import, and ATS formats.
 """
 
@@ -16,15 +16,13 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
-from groq_parser import (
-    parse_resume, extract_text_from_file, is_groq_configured, is_google_configured,
-    GROQ_MODEL, GOOGLE_MODEL,
+from gemma_parser import (
+    parse_resume, extract_text_from_file, is_google_configured, GOOGLE_MODEL,
 )
 from bulk_processor import init_bulk_processing, UPLOAD_DIR
 
-# Active parser provider/model (matches groq_parser's default resolution).
-ACTIVE_PROVIDER = (os.environ.get("LLM_PROVIDER") or "groq").lower()
-ACTIVE_MODEL = GOOGLE_MODEL if ACTIVE_PROVIDER == "google" else GROQ_MODEL
+# Active model (Gemma 4 via Google AI Studio).
+ACTIVE_MODEL = GOOGLE_MODEL
 
 app = Flask(__name__, static_folder='.')
 CORS(app)
@@ -100,11 +98,9 @@ def index():
 def health():
     return jsonify({
         'status': 'healthy',
-        'provider': ACTIVE_PROVIDER,
+        'provider': 'google',
         'model': ACTIVE_MODEL,
-        'provider_configured': is_google_configured() if ACTIVE_PROVIDER == 'google' else is_groq_configured(),
-        'groq_configured': is_groq_configured(),
-        'google_configured': is_google_configured(),
+        'configured': is_google_configured(),
         'supported_formats': sorted(ALLOWED_EXTENSIONS),
         'max_bulk_files': BULK_MAX_FILES,
         'timestamp': time.time(),
@@ -183,7 +179,7 @@ def parse_bulk():
     if not tasks:
         return jsonify({'error': 'No valid files found in upload.'}), 400
 
-    # Parse concurrently (max 5 at a time to respect Groq rate limits)
+    # Parse concurrently (max 5 at a time to respect API rate limits)
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(parse_single_file, fp, fn): fn for fp, fn in tasks}
@@ -461,9 +457,9 @@ def parse_ats(ats_name):
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8000))
-    print(f"Starting Groq Resume Parser on port {port}")
-    print(f"Model: {os.environ.get('GROQ_MODEL', 'llama-3.1-8b-instant')}")
-    print(f"Groq API: {'configured' if is_groq_configured() else 'NOT SET — set GROQ_API_KEY'}")
+    print(f"Starting Gemma 4 Resume Parser on port {port}")
+    print(f"Model: {ACTIVE_MODEL}")
+    print(f"Google AI Studio: {'configured' if is_google_configured() else 'NOT SET — set GOOGLE_API_KEY'}")
     print(f"Formats: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
     print(f"ATS: {', '.join(ATS_FIELD_MAPS.keys())}")
     app.run(host='0.0.0.0', port=port, debug=True)

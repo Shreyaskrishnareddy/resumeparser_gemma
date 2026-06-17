@@ -1,6 +1,7 @@
 """
-Groq Resume Parser — Llama 3.1 8B
-Single-pass, full resume text, no token limits.
+Gemma 4 Resume Parser
+Single-pass, full resume text, no token limits. Powered by Google's Gemma 4
+(open models) via the Google AI Studio / Gemini API.
 """
 
 import calendar
@@ -11,31 +12,22 @@ import time
 import requests
 
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-
 # Google AI Studio / Gemini API (serves open Gemma models, e.g. gemma-4-31b-it)
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
 GOOGLE_MODEL = os.environ.get("GOOGLE_MODEL", "gemma-4-31b-it")
 GOOGLE_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
-# Shared generation settings. Temperature/top_p are identical across providers
-# so the bake-off is fair; only the output cap differs because Groq's free tier
-# caps tokens-per-minute (TPM) at 6000 — reserving 12288 output tokens 413s
-# before the request even runs. Google AI Studio (Gemma) has unlimited TPM.
+# Generation settings.
 MAX_OUTPUT_TOKENS = int(os.environ.get("MAX_OUTPUT_TOKENS", "12288"))
-GROQ_MAX_OUTPUT_TOKENS = int(os.environ.get("GROQ_MAX_OUTPUT_TOKENS", "4096"))
 TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.1"))
 TOP_P = float(os.environ.get("LLM_TOP_P", "0.9"))
 
-# Request timeouts (seconds). Gemma 4 31B on the free tier is slow (~33 tok/s),
+# Request timeout (seconds). Gemma 4 31B on the free tier is slow (~33 tok/s),
 # so a full resume can take 2-4 min — give it a generous ceiling.
-GROQ_TIMEOUT = int(os.environ.get("GROQ_TIMEOUT", "120"))
 GOOGLE_TIMEOUT = int(os.environ.get("GOOGLE_TIMEOUT", "300"))
 
-# Auto-retry transient provider failures (free-tier 500s, 503s, 429s, timeouts).
-# This is what makes a live free-tier demo survive Google's intermittent errors.
+# Auto-retry transient failures (free-tier 500s, 503s, 429s, timeouts).
+# This is what makes a live free-tier deployment survive intermittent errors.
 LLM_MAX_RETRIES = int(os.environ.get("LLM_MAX_RETRIES", "4"))
 LLM_RETRY_BACKOFF = float(os.environ.get("LLM_RETRY_BACKOFF", "5"))
 
@@ -149,13 +141,14 @@ RESUME_TEXT_HERE
 Return ONLY the JSON object. No other text."""
 
 
-def is_groq_configured():
-    """Check if Groq API key is set."""
-    return bool(GROQ_API_KEY)
-
-
 def is_google_configured():
     """Check if Google AI Studio / Gemini API key is set."""
+    return bool(GOOGLE_API_KEY)
+
+
+# Generic alias for callers that don't care about the provider.
+def is_configured():
+    """Check if the parser is configured (Google AI Studio key present)."""
     return bool(GOOGLE_API_KEY)
 
 
@@ -164,69 +157,17 @@ _TRANSIENT_MARKERS = ("500", "503", "429", "Internal", "timed out", "timeout",
 
 
 def _is_transient(err):
-    """True if an error string looks like a retryable provider/capacity issue."""
+    """True if an error string looks like a retryable capacity issue."""
     s = str(err)
     return any(m in s for m in _TRANSIENT_MARKERS)
-
-
-def _infer_provider(model):
-    """Guess the provider from a model name. Returns 'google', 'groq', or None."""
-    if not model:
-        return None
-    m = model.lower()
-    if "gemma" in m or "gemini" in m:
-        return "google"
-    if "llama" in m or "mixtral" in m or "qwen" in m:
-        return "groq"
-    return None
-
-
-def _call_groq(system_prompt, user_prompt, model, key):
-    """Call Groq's OpenAI-compatible chat endpoint.
-
-    Returns a normalized dict: {content, usage, finish_reason} or {error}.
-    """
-    resp = requests.post(
-        GROQ_URL,
-        headers={
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            "temperature": TEMPERATURE,
-            "top_p": TOP_P,
-            "max_completion_tokens": GROQ_MAX_OUTPUT_TOKENS,
-        },
-        timeout=GROQ_TIMEOUT,
-    )
-    if resp.status_code != 200:
-        return {"error": f"Groq API error {resp.status_code}: {resp.text[:300]}"}
-
-    data = resp.json()
-    choice = data["choices"][0]
-    usage = data.get("usage", {}) or {}
-    return {
-        "content": choice["message"]["content"],
-        "finish_reason": choice.get("finish_reason", "unknown"),
-        "usage": {
-            "prompt_tokens": usage.get("prompt_tokens"),
-            "completion_tokens": usage.get("completion_tokens"),
-            "total_tokens": usage.get("total_tokens"),
-        },
-    }
 
 
 def _call_google(system_prompt, user_prompt, model, key):
     """Call Google AI Studio (Gemini API) — used for open Gemma models.
 
     Gemma models on the Gemini API do not accept a separate system role, so we
-    fold the system prompt into the single user turn. Returns the same
-    normalized dict as _call_groq.
+    fold the system prompt into the single user turn. Returns a normalized
+    dict: {content, usage, finish_reason} or {error}.
     """
     url = GOOGLE_URL.format(model=model)
     combined = f"{system_prompt}\n\n{user_prompt}"
@@ -271,50 +212,37 @@ def _call_google(system_prompt, user_prompt, model, key):
     }
 
 
-def parse_resume(resume_text, model=None, api_key=None, provider=None):
+def parse_resume(resume_text, model=None, api_key=None):
     """
-    Parse resume text using Groq (Llama) or Google AI Studio (Gemma).
+    Parse resume text using Google AI Studio (Gemma 4).
 
     Args:
         resume_text: Full raw text from resume (no truncation)
-        model: Override model name (e.g. "gemma-4-31b-it", "llama-3.1-8b-instant")
+        model: Override model name (default: gemma-4-31b-it)
         api_key: Override API key
-        provider: "groq" or "google". Inferred from model name if omitted.
 
     Returns:
         dict with parsed fields + _metadata
     """
-    provider = (provider or _infer_provider(model)
-                or os.environ.get("LLM_PROVIDER") or "groq").lower()
-
-    if provider == "google":
-        mdl = model or GOOGLE_MODEL
-        key = api_key or GOOGLE_API_KEY
-        if not key:
-            return {"error": "GOOGLE_API_KEY not set. Set it as an env var or pass api_key."}
-    else:
-        mdl = model or GROQ_MODEL
-        key = api_key or GROQ_API_KEY
-        if not key:
-            return {"error": "GROQ_API_KEY not set. Set it as an env var or pass api_key."}
+    mdl = model or GOOGLE_MODEL
+    key = api_key or GOOGLE_API_KEY
+    if not key:
+        return {"error": "GOOGLE_API_KEY not set. Set it as an env var or pass api_key."}
 
     prompt = PARSE_PROMPT.replace("RESUME_TEXT_HERE", resume_text)
     start = time.time()
 
     try:
-        # Retry transient provider failures (free-tier 500/503/429/timeout) with
-        # linear backoff. A permanent error (e.g. bad key, 400) is returned at once.
+        # Retry transient failures (free-tier 500/503/429/timeout) with linear
+        # backoff. A permanent error (e.g. bad key, 400) is returned at once.
         completion = None
         attempts = 0
         for attempt in range(LLM_MAX_RETRIES):
             attempts = attempt + 1
             try:
-                if provider == "google":
-                    completion = _call_google(SYSTEM_PROMPT, prompt, mdl, key)
-                else:
-                    completion = _call_groq(SYSTEM_PROMPT, prompt, mdl, key)
+                completion = _call_google(SYSTEM_PROMPT, prompt, mdl, key)
             except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
-                completion = {"error": f"{provider} request failed: {e}"}
+                completion = {"error": f"request failed: {e}"}
 
             if "error" not in completion:
                 break
@@ -344,7 +272,7 @@ def parse_resume(resume_text, model=None, api_key=None, provider=None):
             }
 
         parsed["_metadata"] = {
-            "parser": provider,
+            "parser": "gemma",
             "model": mdl,
             "processing_time_ms": elapsed_ms,
             "finish_reason": finish,
@@ -367,20 +295,12 @@ def parse_resume(resume_text, model=None, api_key=None, provider=None):
         except Exception:
             pass
 
-        # Enrich with taxonomy normalization (canonical IDs, categories, etc.)
-        try:
-            from groq_taxonomy import enrich_resume
-            parsed = enrich_resume(parsed)
-        except ImportError:
-            pass
-
         return parsed
 
     except requests.exceptions.Timeout:
-        limit = GOOGLE_TIMEOUT if provider == "google" else GROQ_TIMEOUT
-        return {"error": f"{provider} API timed out after {limit}s", "processing_time_ms": int((time.time() - start) * 1000)}
+        return {"error": f"Gemma API timed out after {GOOGLE_TIMEOUT}s", "processing_time_ms": int((time.time() - start) * 1000)}
     except requests.exceptions.ConnectionError:
-        return {"error": f"Cannot connect to {provider} API. Check your internet connection."}
+        return {"error": "Cannot connect to the Gemma (Google AI Studio) API. Check your internet connection."}
     except Exception as e:
         return {"error": str(e), "processing_time_ms": int((time.time() - start) * 1000)}
 
@@ -1710,9 +1630,9 @@ def _extract_image_ocr(filepath):
 
 
 if __name__ == "__main__":
-    if not GROQ_API_KEY:
-        print("Set GROQ_API_KEY first:")
-        print("  export GROQ_API_KEY=gsk_...")
+    if not GOOGLE_API_KEY:
+        print("Set GOOGLE_API_KEY first (get one at https://aistudio.google.com/apikey):")
+        print("  export GOOGLE_API_KEY=...")
         exit(1)
 
     test = """

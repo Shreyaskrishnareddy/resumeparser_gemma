@@ -14,7 +14,7 @@ import threading
 import time
 import uuid
 
-from groq_parser import parse_resume, extract_text_from_file
+from gemma_parser import parse_resume, extract_text_from_file
 
 # --- Configuration ---
 DATA_DIR = os.environ.get("BULK_DATA_DIR", os.path.join(os.path.dirname(__file__), "data"))
@@ -306,7 +306,7 @@ class BulkProcessor:
                 time.sleep(self._poll_interval)
 
     def _process_one(self, file_row):
-        """Process a single file: extract text, call Groq, store result."""
+        """Process a single file: extract text, call Gemma, store result."""
         start = time.time()
         file_id = file_row["id"]
         job_id = file_row["job_id"]

@@ -41,8 +41,7 @@ analyze.py
 report.py
 finalize.py
 qa_parse.py
-bakeoff_results.json
-bakeoff_groq.json
+bakeoff*.json
 final_results.json
 DEMO_TALKING_POINTS.md
 QA_COMPARISON_FINDINGS.md

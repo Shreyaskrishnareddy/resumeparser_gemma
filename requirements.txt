@@ -3,7 +3,7 @@ Flask==3.1.2
 flask-cors==6.0.1
 gunicorn==23.0.0
 
-# HTTP Client (Groq API)
+# HTTP Client
 requests==2.32.3
 
 # Document Processing
@@ -14,9 +14,3 @@ olefile==0.47
 # OCR Support (JPEG/PNG/TIFF/BMP/scanned PDFs)
 pytesseract==0.3.13
 Pillow==11.1.0
-
-# Taxonomy (shared skill/title/cert normalization) — OPTIONAL.
-# Loaded via try/except ImportError in groq_parser; the parser runs fine without
-# it. Disabled by default because it's a PRIVATE repo and breaks clean builds
-# (e.g. Render). Re-enable only on a host that has access to the monorepo:
-# groq-taxonomy @ git+https://github.com/Shreyaskrishnareddy/monorepo.git#subdirectory=packages/taxonomy
