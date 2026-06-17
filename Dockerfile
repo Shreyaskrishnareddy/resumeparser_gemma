@@ -16,6 +16,7 @@ COPY . .
 
 EXPOSE 8000
 
-# --timeout 600: Gemma 4 31B (free tier) can take 2-4 min per resume; the
-# default 120s would kill the worker mid-request.
-CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "600"]
+# One process + threads (gthread): avoids a multi-process SQLite WAL init race
+# while keeping /health and the UI responsive while a 2-4 min parse runs in
+# another thread. --timeout 600 because Gemma 4 (free tier) is slow per resume.
+CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "8", "--timeout", "600"]

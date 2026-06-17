@@ -3,10 +3,10 @@ services:
     name: resumeparser-gemma
     runtime: python
     buildCommand: pip install -r requirements.txt
-    # --timeout 600: Gemma 4 31B (free tier) takes ~2-4 min per resume; the
-    # default 120s would kill the worker mid-request. --workers 2 keeps the
-    # health check responsive while a parse is in flight.
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 600
+    # One process + threads (gthread): avoids a multi-process SQLite WAL init
+    # race while keeping /health responsive during a 2-4 min parse. --timeout
+    # 600 because Gemma 4 (free tier) is slow per resume.
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 600
     envVars:
       # Gemma 4 via Google AI Studio. Get a free key at aistudio.google.com/apikey
       - key: GOOGLE_API_KEY

@@ -67,9 +67,19 @@ class JobStore:
     def _get_conn(self):
         """One connection per thread (SQLite requirement)."""
         if not hasattr(self._local, "conn") or self._local.conn is None:
-            conn = sqlite3.connect(self.db_path, timeout=10)
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA busy_timeout=5000")
+            conn = sqlite3.connect(self.db_path, timeout=30)
+            # Set busy_timeout BEFORE switching journal mode so the WAL switch
+            # waits for any lock instead of failing. Retry the WAL pragma in
+            # case two processes initialize a fresh DB at the same time.
+            conn.execute("PRAGMA busy_timeout=30000")
+            for attempt in range(10):
+                try:
+                    conn.execute("PRAGMA journal_mode=WAL")
+                    break
+                except sqlite3.OperationalError:
+                    if attempt == 9:
+                        break  # WAL is an optimization; proceed without it
+                    time.sleep(0.3)
             conn.row_factory = sqlite3.Row
             self._local.conn = conn
         return self._local.conn
