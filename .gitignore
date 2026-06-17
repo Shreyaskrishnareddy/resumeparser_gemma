@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads / test files
+*.pdf
+*.docx
+uploads/
+
+# Async bulk processing data
+data/
+
+# Test results (QA reports, cycle outputs)
+test-results/
+qa_test_results/
+run_qa_test.py
+run_qa_retest.py
+
+# Session / QA artifacts (NOT for deploy — some contain candidate PII)
+bakeoff.py
+analyze.py
+report.py
+finalize.py
+qa_parse.py
+bakeoff_results.json
+bakeoff_groq.json
+final_results.json
+DEMO_TALKING_POINTS.md
+QA_COMPARISON_FINDINGS.md
+REPORT.md

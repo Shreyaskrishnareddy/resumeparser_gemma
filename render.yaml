@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: llama-resumeparser
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    # --timeout 600: Gemma 4 31B (free tier) takes ~2-4 min per resume; the
+    # default 120s would kill the worker mid-request. --workers 2 keeps the
+    # health check responsive while a parse is in flight.
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 600
+    envVars:
+      # Default parser: Google AI Studio (Gemma 4 31B)
+      - key: LLM_PROVIDER
+        value: google
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GOOGLE_MODEL
+        value: gemma-4-31b-it
+      - key: GOOGLE_TIMEOUT
+        value: "300"
+      # Auto-retry transient free-tier 500s/timeouts so live requests survive.
+      - key: LLM_MAX_RETRIES
+        value: "4"
+      # Groq kept as an optional fallback (set a key to use it)
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.1-8b-instant
+    healthCheckPath: /health

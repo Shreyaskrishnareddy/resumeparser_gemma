@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume Parser</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+            background: #eef3f9; min-height: 100vh; color: #334155;
+        }
+        .container { max-width: 960px; margin: 48px auto; padding: 0 24px; }
+        /* Header */
+        .topbar {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 36px; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0;
+        }
+        .brand { display: flex; align-items: center; gap: 10px; }
+        .brand-mark {
+            width: 30px; height: 30px; border-radius: 7px;
+            background: linear-gradient(135deg, #2563eb, #60a5fa);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; color: #ffffff; font-size: 1.05rem;
+        }
+        .brand-name { font-size: 1.25rem; font-weight: 700; color: #0f172a; letter-spacing: -0.01em; }
+        .brand-name span { color: #2563eb; }
+        .endpoint-pill {
+            font-family: 'SF Mono', ui-monospace, monospace; font-size: 0.78rem;
+            color: #64748b; background: #f1f5f9; border: 1px solid #e2e8f0;
+            padding: 5px 10px; border-radius: 6px;
+        }
+        .endpoint-pill b { color: #16a34a; }
+        h1 {
+            font-size: 2.2rem; font-weight: 700; text-align: center;
+            margin-bottom: 6px; letter-spacing: -0.02em; color: #0f172a;
+        }
+        .subtitle {
+            text-align: center; color: #64748b; margin-bottom: 40px;
+            font-size: 1rem;
+        }
+        .subtitle span { color: #2563eb; font-weight: 600; }
+        .upload-area {
+            background: #ffffff; border: 2px dashed #cbd5e1;
+            border-radius: 12px; padding: 48px 32px; text-align: center;
+            cursor: pointer; margin-bottom: 24px; transition: all 0.2s;
+        }
+        .upload-area:hover { border-color: #2563eb; }
+        .upload-area.dragover { border-color: #2563eb; background: #eef4ff; }
+        .upload-icon { font-size: 2.5rem; margin-bottom: 12px; }
+        .upload-text { font-size: 1.1rem; font-weight: 500; color: #475569; }
+        .upload-sub { color: #94a3b8; font-size: 0.9rem; margin-top: 6px; }
+        #fileInput { display: none; }
+        .btn {
+            background: #2563eb; color: #ffffff; border: none;
+            padding: 12px 28px; border-radius: 8px; font-size: 1rem;
+            font-weight: 600; cursor: pointer; margin-top: 16px;
+            transition: background 0.2s;
+        }
+        .btn:hover { background: #1d4ed8; }
+        .btn:disabled { background: #cbd5e1; cursor: not-allowed; }
+        .loading { display: none; text-align: center; margin: 32px 0; }
+        .spinner {
+            width: 36px; height: 36px; border: 3px solid #cbd5e1;
+            border-top-color: #2563eb; border-radius: 50%;
+            animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .result { display: none; margin-top: 32px; }
+        .result-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px;
+        }
+        .result-header h2 { font-size: 1.3rem; color: #0f172a; }
+        .meta { color: #64748b; font-size: 0.85rem; }
+        .meta span { color: #2563eb; font-weight: 600; }
+        .section {
+            background: #ffffff; border-radius: 10px; padding: 20px;
+            margin-bottom: 16px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(15,23,42,0.05);
+        }
+        .section h3 {
+            font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em;
+            color: #2563eb; margin-bottom: 12px;
+        }
+        .field { margin-bottom: 8px; }
+        .field-label { color: #64748b; font-size: 0.85rem; }
+        .field-value { color: #334155; font-size: 0.95rem; margin-top: 2px; }
+        .tag {
+            display: inline-block; background: #eef4ff; color: #475569;
+            padding: 4px 10px; border-radius: 6px; font-size: 0.82rem;
+            margin: 3px 4px 3px 0; border: 1px solid #cbd5e1;
+        }
+        .tag.primary { border-color: #2563eb; color: #2563eb; }
+        .exp-item { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; }
+        .exp-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .exp-title { font-weight: 600; color: #0f172a; font-size: 0.95rem; }
+        .exp-company { color: #2563eb; font-size: 0.9rem; }
+        .exp-date { color: #94a3b8; font-size: 0.82rem; margin-top: 2px; }
+        .exp-resp { color: #64748b; font-size: 0.88rem; margin-top: 6px; padding-left: 16px; }
+        .exp-resp li { margin-bottom: 3px; }
+        .json-toggle {
+            background: none; border: 1px solid #cbd5e1; color: #64748b;
+            padding: 6px 14px; border-radius: 6px; cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .json-toggle:hover { border-color: #2563eb; color: #2563eb; }
+        .json-view {
+            display: none; background: #f8fafc; border-radius: 8px;
+            padding: 16px; overflow-x: auto; font-family: 'SF Mono', monospace;
+            font-size: 0.82rem; color: #64748b; margin-top: 16px;
+            border: 1px solid #e2e8f0; max-height: 500px; overflow-y: auto;
+        }
+        .error {
+            background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px;
+            padding: 16px; color: #dc2626; display: none; margin-top: 20px;
+        }
+        /* Engineering metadata bar */
+        .metabar {
+            display: flex; flex-wrap: wrap; gap: 18px; background: #f8fafc; border: 1px solid #e2e8f0;
+            border-radius: 10px; padding: 12px 18px; margin-bottom: 18px;
+            font-family: 'SF Mono', ui-monospace, monospace; font-size: 0.82rem;
+        }
+        .metabar .m-label { color: #94a3b8; }
+        .metabar .m-val { color: #334155; }
+        .metabar .m-val.accent { color: #2563eb; }
+        .metabar .m-val.ok { color: #16a34a; }
+        /* Result sub-tabs */
+        .subtabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+        .subtab {
+            padding: 7px 16px; cursor: pointer; color: #64748b; font-size: 0.88rem; font-weight: 600;
+            background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 7px; transition: all 0.15s;
+        }
+        .subtab:hover { color: #475569; border-color: #94a3b8; }
+        .subtab.active { color: #ffffff; background: #2563eb; border-color: #2563eb; }
+        .subpane { display: none; }
+        .subpane.active { display: block; }
+        .copy-btn {
+            background: #f1f5f9; border: 1px solid #cbd5e1; color: #64748b; padding: 6px 14px;
+            border-radius: 6px; cursor: pointer; font-size: 0.82rem; float: right; margin-bottom: 8px;
+        }
+        .copy-btn:hover { border-color: #2563eb; color: #2563eb; }
+        .code-block {
+            background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px;
+            overflow: auto; font-family: 'SF Mono', ui-monospace, monospace; font-size: 0.82rem;
+            color: #1e293b; max-height: 560px; white-space: pre; clear: both;
+        }
+        .ats-row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+        .ats-row label { color: #64748b; font-size: 0.85rem; }
+        .ats-select {
+            background: #f1f5f9; border: 1px solid #cbd5e1; color: #334155;
+            padding: 7px 12px; border-radius: 6px; font-size: 0.88rem;
+        }
+        .tabs { display: flex; gap: 0; margin-bottom: 24px; border-bottom: 2px solid #e2e8f0; }
+        .tab {
+            padding: 12px 28px; cursor: pointer; color: #64748b; font-weight: 600;
+            font-size: 1rem; border-bottom: 2px solid transparent; margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+        .tab:hover { color: #475569; }
+        .tab.active { color: #2563eb; border-bottom-color: #2563eb; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .bulk-upload-area {
+            background: #ffffff; border: 2px dashed #cbd5e1;
+            border-radius: 12px; padding: 36px 32px; text-align: center;
+            cursor: pointer; margin-bottom: 24px; transition: all 0.2s;
+        }
+        .bulk-upload-area:hover { border-color: #2563eb; }
+        .bulk-upload-area.dragover { border-color: #2563eb; background: #eef4ff; }
+        .file-list {
+            background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px;
+            padding: 12px 16px; margin-bottom: 16px; max-height: 200px;
+            overflow-y: auto; display: none;
+        }
+        .file-list-item {
+            padding: 4px 0; font-size: 0.88rem; color: #64748b;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        .file-list-item:last-child { border-bottom: none; }
+        .progress-container { display: none; margin: 24px 0; }
+        .progress-bar-bg {
+            background: #e2e8f0; border-radius: 8px; height: 24px; overflow: hidden;
+        }
+        .progress-bar {
+            background: #2563eb; height: 100%; border-radius: 8px;
+            transition: width 0.5s ease; width: 0%;
+        }
+        .progress-text {
+            text-align: center; margin-top: 8px; color: #64748b; font-size: 0.9rem;
+        }
+        .progress-text span { color: #2563eb; font-weight: 600; }
+        .bulk-results { display: none; margin-top: 24px; }
+        .bulk-results table {
+            width: 100%; border-collapse: collapse; font-size: 0.88rem;
+        }
+        .bulk-results th {
+            text-align: left; padding: 10px 12px; color: #64748b;
+            border-bottom: 2px solid #cbd5e1; font-weight: 600; text-transform: uppercase;
+            font-size: 0.78rem; letter-spacing: 0.05em;
+        }
+        .bulk-results td {
+            padding: 10px 12px; border-bottom: 1px solid #f1f5f9; color: #475569;
+        }
+        .bulk-results tr:hover td { background: #f1f5f9; }
+        .status-ok { color: #16a34a; font-weight: 600; }
+        .status-fail { color: #dc2626; font-weight: 600; }
+        .btn-sm {
+            background: none; border: 1px solid #cbd5e1; color: #64748b;
+            padding: 4px 10px; border-radius: 5px; cursor: pointer;
+            font-size: 0.8rem;
+        }
+        .btn-sm:hover { border-color: #2563eb; color: #2563eb; }
+        .bulk-summary {
+            background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px;
+            padding: 16px 20px; margin-bottom: 16px; display: flex;
+            gap: 32px; justify-content: center;
+        }
+        .bulk-stat { text-align: center; }
+        .bulk-stat-num { font-size: 1.8rem; font-weight: 700; color: #0f172a; }
+        .bulk-stat-label { font-size: 0.78rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+        .bulk-stat-num.success { color: #16a34a; }
+        .bulk-stat-num.fail { color: #dc2626; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="topbar">
+            <div class="brand">
+                <div class="brand-name">Resume Parser</div>
+            </div>
+        </div>
+        <p class="subtitle">Drop a resume to extract structured candidate data</p>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('single')">Single Resume</div>
+            <div class="tab" onclick="switchTab('bulk')">Bulk Upload</div>
+        </div>
+
+        <!-- Single Resume Tab -->
+        <div class="tab-content active" id="tab-single">
+            <div class="upload-area" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                <div class="upload-icon">+</div>
+                <div class="upload-text">Drop resume here or click to upload</div>
+                <div class="upload-sub">PDF, DOC, DOCX, TXT, JPG, PNG (max 10MB)</div>
+                <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.tiff,.bmp,.html">
+            </div>
+
+            <div style="text-align:center">
+                <button class="btn" id="parseBtn" disabled onclick="parseResume()">Parse Resume</button>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <div style="color:#475569">Reading the entire resume with <span style="color:#2563eb">Gemma 4</span>&hellip;</div>
+                <div style="color:#94a3b8; font-size:0.85rem; margin-top:6px">Elapsed: <span id="elapsed" style="color:#2563eb">0s</span> &mdash; full-resume parsing takes ~2&ndash;4 min on the free tier</div>
+            </div>
+
+            <div class="error" id="error"></div>
+
+            <div class="result" id="result">
+                <div class="result-header">
+                    <h2 id="resultFilename">Results</h2>
+                </div>
+
+                <!-- Engineering metadata: model, timing, tokens -->
+                <div class="metabar" id="metabar"></div>
+
+                <!-- Result sub-tabs: Structured / JSON / ATS mapping -->
+                <div class="subtabs">
+                    <div class="subtab active" onclick="switchPane('structured', this)">Structured</div>
+                    <div class="subtab" onclick="switchPane('json', this)">JSON</div>
+                    <div class="subtab" onclick="switchPane('ats', this)">ATS Mapping</div>
+                </div>
+
+                <div class="subpane active" id="pane-structured">
+                    <div id="sections"></div>
+                </div>
+
+                <div class="subpane" id="pane-json">
+                    <button class="copy-btn" onclick="copyText('jsonContent', this)">Copy JSON</button>
+                    <pre class="code-block" id="jsonContent"></pre>
+                </div>
+
+                <div class="subpane" id="pane-ats">
+                    <div class="ats-row">
+                        <label>ATS format:</label>
+                        <select class="ats-select" id="atsSelect" onchange="renderAts()">
+                            <option value="bullhorn">Bullhorn</option>
+                            <option value="dice">Dice</option>
+                            <option value="ceipal">Ceipal</option>
+                        </select>
+                        <button class="copy-btn" style="float:none;margin:0" onclick="copyText('atsContent', this)">Copy</button>
+                    </div>
+                    <pre class="code-block" id="atsContent"></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bulk Upload Tab -->
+        <div class="tab-content" id="tab-bulk">
+            <div class="bulk-upload-area" id="bulkDropZone" onclick="document.getElementById('bulkFileInput').click()">
+                <div class="upload-icon">+</div>
+                <div class="upload-text">Drop files or folder here, or click to select</div>
+                <div class="upload-sub">Upload multiple resumes or select a folder (max 50 files)</div>
+                <input type="file" id="bulkFileInput" multiple accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.tiff,.bmp,.html" style="display:none">
+            </div>
+
+            <div style="text-align:center; margin-bottom: 16px;">
+                <button class="btn" style="background:none; border:1px solid #cbd5e1; color:#64748b; margin-right:8px;" onclick="document.getElementById('bulkFolderInput').click()">
+                    Select Folder
+                </button>
+                <input type="file" id="bulkFolderInput" webkitdirectory multiple style="display:none">
+                <button class="btn" id="bulkParseBtn" disabled onclick="submitBulkJob()">Parse All Resumes</button>
+            </div>
+
+            <div class="file-list" id="bulkFileList"></div>
+
+            <div class="error" id="bulkError"></div>
+
+            <div class="progress-container" id="bulkProgress">
+                <div class="progress-bar-bg">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+                <div class="progress-text" id="progressText">
+                    <span>0</span> / 0 files processed
+                </div>
+            </div>
+
+            <div class="bulk-results" id="bulkResults">
+                <div class="bulk-summary" id="bulkSummary"></div>
+                <div style="text-align:right; margin-bottom:12px;">
+                    <button class="btn-sm" onclick="downloadBulkJson()">Download JSON</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>File</th>
+                            <th>Name</th>
+                            <th>Role</th>
+                            <th>Skills</th>
+                            <th>Time</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="bulkResultsBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === Tab switching ===
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tab-content#tab-${tab}`).classList.add('active');
+            document.querySelectorAll('.tab')[tab === 'single' ? 0 : 1].classList.add('active');
+        }
+
+        // === Single Resume ===
+        let selectedFile = null;
+
+        const drop = document.getElementById('dropZone');
+        const input = document.getElementById('fileInput');
+        const btn = document.getElementById('parseBtn');
+
+        drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragover'); });
+        drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+        drop.addEventListener('drop', e => {
+            e.preventDefault(); drop.classList.remove('dragover');
+            if (e.dataTransfer.files.length) { selectedFile = e.dataTransfer.files[0]; onFileSelected(); }
+        });
+        input.addEventListener('change', () => { selectedFile = input.files[0]; onFileSelected(); });
+
+        function onFileSelected() {
+            if (selectedFile) {
+                drop.querySelector('.upload-text').textContent = selectedFile.name;
+                btn.disabled = false;
+            }
+        }
+
+        async function parseResume() {
+            if (!selectedFile) return;
+            const loading = document.getElementById('loading');
+            const result = document.getElementById('result');
+            const error = document.getElementById('error');
+
+            loading.style.display = 'block';
+            result.style.display = 'none';
+            error.style.display = 'none';
+            btn.disabled = true;
+
+            // Elapsed-time counter so a multi-minute parse doesn't look frozen.
+            const t0 = Date.now();
+            const elEl = document.getElementById('elapsed');
+            const timer = setInterval(() => {
+                const s = Math.floor((Date.now() - t0) / 1000);
+                elEl.textContent = s < 60 ? s + 's' : Math.floor(s/60) + 'm ' + (s%60) + 's';
+            }, 1000);
+
+            const form = new FormData();
+            form.append('file', selectedFile);
+
+            try {
+                const resp = await fetch('/parse', { method: 'POST', body: form });
+                const data = await resp.json();
+
+                if (data.error) {
+                    error.textContent = data.error + (data.attempts ? ` (after ${data.attempts} attempts)` : '');
+                    error.style.display = 'block';
+                    return;
+                }
+
+                renderResult(data);
+            } catch (e) {
+                error.textContent = 'Network error: ' + e.message;
+                error.style.display = 'block';
+            } finally {
+                clearInterval(timer);
+                loading.style.display = 'none';
+                btn.disabled = false;
+            }
+        }
+
+        // === Bulk Upload ===
+        let bulkFiles = [];
+        let currentJobId = null;
+        let bulkResultData = null;
+        const ALLOWED_EXT = ['pdf','doc','docx','txt','html','htm','jpg','jpeg','png','tiff','bmp'];
+
+        const bulkDrop = document.getElementById('bulkDropZone');
+        const bulkInput = document.getElementById('bulkFileInput');
+        const bulkFolder = document.getElementById('bulkFolderInput');
+        const bulkBtn = document.getElementById('bulkParseBtn');
+
+        bulkDrop.addEventListener('dragover', e => { e.preventDefault(); bulkDrop.classList.add('dragover'); });
+        bulkDrop.addEventListener('dragleave', () => bulkDrop.classList.remove('dragover'));
+        bulkDrop.addEventListener('drop', e => {
+            e.preventDefault(); bulkDrop.classList.remove('dragover');
+            addBulkFiles(e.dataTransfer.files);
+        });
+        bulkInput.addEventListener('change', () => addBulkFiles(bulkInput.files));
+        bulkFolder.addEventListener('change', () => addBulkFiles(bulkFolder.files));
+
+        function addBulkFiles(fileList) {
+            const newFiles = Array.from(fileList).filter(f => {
+                const ext = f.name.split('.').pop().toLowerCase();
+                return ALLOWED_EXT.includes(ext);
+            });
+            bulkFiles = [...bulkFiles, ...newFiles].slice(0, 50);
+            renderFileList();
+        }
+
+        function renderFileList() {
+            const list = document.getElementById('bulkFileList');
+            if (!bulkFiles.length) { list.style.display = 'none'; bulkBtn.disabled = true; return; }
+            list.style.display = 'block';
+            bulkBtn.disabled = false;
+            list.innerHTML = bulkFiles.map((f, i) =>
+                `<div class="file-list-item">${i+1}. ${esc(f.name)} <span style="color:#94a3b8">(${(f.size/1024).toFixed(0)}KB)</span></div>`
+            ).join('');
+            bulkDrop.querySelector('.upload-text').textContent = `${bulkFiles.length} file(s) selected`;
+        }
+
+        async function submitBulkJob() {
+            if (!bulkFiles.length) return;
+            const error = document.getElementById('bulkError');
+            const progress = document.getElementById('bulkProgress');
+            const results = document.getElementById('bulkResults');
+
+            error.style.display = 'none';
+            results.style.display = 'none';
+            progress.style.display = 'block';
+            bulkBtn.disabled = true;
+            updateProgress(0, bulkFiles.length);
+
+            const form = new FormData();
+            bulkFiles.forEach(f => form.append('files', f));
+
+            try {
+                const resp = await fetch('/jobs/bulk', { method: 'POST', body: form });
+                const data = await resp.json();
+
+                if (data.error) {
+                    error.textContent = data.error;
+                    error.style.display = 'block';
+                    progress.style.display = 'none';
+                    bulkBtn.disabled = false;
+                    return;
+                }
+
+                currentJobId = data.job_id;
+                pollJobStatus();
+            } catch (e) {
+                error.textContent = 'Network error: ' + e.message;
+                error.style.display = 'block';
+                progress.style.display = 'none';
+                bulkBtn.disabled = false;
+            }
+        }
+
+        function updateProgress(done, total) {
+            const pct = total > 0 ? Math.round(done / total * 100) : 0;
+            document.getElementById('progressBar').style.width = pct + '%';
+            document.getElementById('progressText').innerHTML =
+                `<span>${done}</span> / ${total} files processed (${pct}%)`;
+        }
+
+        async function pollJobStatus() {
+            if (!currentJobId) return;
+            try {
+                const resp = await fetch(`/jobs/${currentJobId}`);
+                const data = await resp.json();
+
+                const done = data.completed_files + data.failed_files;
+                updateProgress(done, data.total_files);
+
+                if (data.status === 'completed') {
+                    fetchBulkResults();
+                } else {
+                    setTimeout(pollJobStatus, 2000);
+                }
+            } catch (e) {
+                setTimeout(pollJobStatus, 3000);
+            }
+        }
+
+        async function fetchBulkResults() {
+            try {
+                const resp = await fetch(`/jobs/${currentJobId}/results`);
+                bulkResultData = await resp.json();
+                renderBulkResults(bulkResultData);
+            } catch (e) {
+                document.getElementById('bulkError').textContent = 'Failed to load results';
+                document.getElementById('bulkError').style.display = 'block';
+            }
+            document.getElementById('bulkProgress').style.display = 'none';
+            bulkBtn.disabled = false;
+        }
+
+        function renderBulkResults(data) {
+            const container = document.getElementById('bulkResults');
+            const summary = document.getElementById('bulkSummary');
+            const tbody = document.getElementById('bulkResultsBody');
+
+            summary.innerHTML = `
+                <div class="bulk-stat"><div class="bulk-stat-num">${data.total_files}</div><div class="bulk-stat-label">Total</div></div>
+                <div class="bulk-stat"><div class="bulk-stat-num success">${data.successful}</div><div class="bulk-stat-label">Parsed</div></div>
+                <div class="bulk-stat"><div class="bulk-stat-num fail">${data.failed}</div><div class="bulk-stat-label">Failed</div></div>
+            `;
+
+            tbody.innerHTML = data.results.map((r, i) => {
+                const res = r.result || {};
+                const pd = res.PersonalDetails || {};
+                const os = res.OverallSummary || {};
+                const skills = res.ListOfSkills || [];
+                const ok = r.status === 'completed' && !r.error;
+                return `<tr>
+                    <td>${i + 1}</td>
+                    <td>${esc(r.filename)}</td>
+                    <td>${esc(pd.FullName || '-')}</td>
+                    <td>${esc(os.CurrentJobRole || '-')}</td>
+                    <td>${skills.length}</td>
+                    <td>${r.processing_time_ms ? (r.processing_time_ms / 1000).toFixed(1) + 's' : '-'}</td>
+                    <td class="${ok ? 'status-ok' : 'status-fail'}">${ok ? 'OK' : 'FAIL'}</td>
+                    <td><button class="btn-sm" onclick="viewBulkDetail(${i})">View</button></td>
+                </tr>`;
+            }).join('');
+
+            container.style.display = 'block';
+        }
+
+        function viewBulkDetail(idx) {
+            if (!bulkResultData) return;
+            const r = bulkResultData.results[idx];
+            if (!r || !r.result) return;
+            renderResult({ filename: r.filename, processing_time_ms: r.processing_time_ms, result: r.result });
+            switchTab('single');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function downloadBulkJson() {
+            if (!bulkResultData) return;
+            const blob = new Blob([JSON.stringify(bulkResultData, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `bulk_results_${currentJobId || 'export'}.json`;
+            a.click();
+        }
+
+        // === Shared render ===
+        let lastResult = null;
+
+        function renderResult(data) {
+            const r = data.result;
+            lastResult = r;
+            document.getElementById('resultFilename').textContent = data.filename || 'Result';
+            document.getElementById('jsonContent').textContent = JSON.stringify(r, null, 2);
+
+            // Engineering metadata bar (model, timing, tokens)
+            const m = r._metadata || {};
+            const secs = ((data.processing_time_ms || m.processing_time_ms || 0) / 1000).toFixed(1);
+            document.getElementById('metabar').innerHTML = [
+                metaItem('model', m.model || 'gemma-4-31b-it', 'accent'),
+                metaItem('provider', m.parser || 'google', ''),
+                metaItem('time', secs + 's', ''),
+                metaItem('prompt_tok', m.prompt_tokens != null ? m.prompt_tokens : '–', ''),
+                metaItem('output_tok', m.completion_tokens != null ? m.completion_tokens : '–', ''),
+                metaItem('finish', m.finish_reason || '–', m.finish_reason === 'STOP' || m.finish_reason === 'stop' ? 'ok' : ''),
+            ].join('');
+
+            // Reset to Structured pane on each new result
+            switchPaneById('structured');
+
+            const s = document.getElementById('sections');
+            s.innerHTML = '';
+
+            // Personal Details
+            const p = r.PersonalDetails || {};
+            s.innerHTML += section('Personal Details', [
+                field('Full Name', p.FullName),
+                field('First Name', p.FirstName),
+                field('Middle Name', p.MiddleName),
+                field('Last Name', p.LastName),
+                field('Email', p.EmailID),
+                field('Phone', p.PhoneNumber),
+                field('Country Code', p.CountryCode),
+                field('Location', p.Location),
+                field('LinkedIn', p.LinkedIn),
+                field('GitHub', p.GitHub),
+                field('Portfolio', p.Portfolio),
+            ].join(''));
+
+            // Overall Summary
+            const os = r.OverallSummary || {};
+            if (os.Summary || os.CurrentJobRole || os.TotalExperience) {
+                let html = '';
+                html += field('Current Role', os.CurrentJobRole);
+                html += field('Total Experience', os.TotalExperience);
+                html += field('Domain', os.Domain);
+                if (os.RelevantJobTitles && os.RelevantJobTitles.length) {
+                    html += '<div class="field"><span class="field-label">Related Titles:</span><br>' + os.RelevantJobTitles.map(t => `<span class="tag">${esc(t)}</span>`).join('') + '</div>';
+                }
+                if (os.Summary) html += `<div class="field" style="margin-top:8px"><span class="field-label">Summary:</span><div class="field-value">${esc(os.Summary)}</div></div>`;
+                s.innerHTML += section('Overall Summary', html);
+            }
+
+            // Experience
+            const exps = r.ListOfExperiences || [];
+            if (exps.length) {
+                s.innerHTML += section('Experience (' + exps.length + ')', exps.map(e => `
+                    <div class="exp-item">
+                        <div class="exp-title">${esc(e.JobTitle || '')}</div>
+                        <div class="exp-company">${esc(e.CompanyName || '')}${e.Location ? ' &mdash; ' + esc(e.Location) : ''}</div>
+                        <div class="exp-date">${esc(e.StartDate || '')} - ${esc(e.EndDate || '')}${e.ExperienceInYears ? ' (' + esc(e.ExperienceInYears) + ')' : ''}</div>
+                        ${e.Summary ? '<div class="field-value" style="margin-top:4px;color:#64748b;font-size:0.88rem">' + esc(e.Summary) + '</div>' : ''}
+                        ${(e.KeyResponsibilities || []).length ? '<ul class="exp-resp">' + e.KeyResponsibilities.map(r => '<li>' + esc(r) + '</li>').join('') + '</ul>' : ''}
+                    </div>
+                `).join(''));
+            }
+
+            // Education
+            const edus = r.ListOfEducation || [];
+            if (edus.length) {
+                s.innerHTML += section('Education (' + edus.length + ')', edus.map(e => `
+                    <div class="exp-item">
+                        <div class="exp-title">${esc(e.Degree || '')}${e.Field ? ' in ' + esc(e.Field) : ''}</div>
+                        <div class="exp-company">${esc(e.Institution || '')}${e.Location ? ' &mdash; ' + esc(e.Location) : ''}</div>
+                        <div class="exp-date">${esc(e.YearPassed || '')}${e.TypeOfEducation ? ' | ' + esc(e.TypeOfEducation) : ''}${e.GPA ? ' | GPA: ' + esc(e.GPA) : ''}</div>
+                    </div>
+                `).join(''));
+            }
+
+            // Skills
+            const skills = r.ListOfSkills || [];
+            const primary = r.PrimarySkills || [];
+            const secondary = r.SecondarySkills || [];
+            if (skills.length || primary.length) {
+                let html = '';
+                if (primary.length) {
+                    html += '<div style="margin-bottom:10px"><span class="field-label">Primary:</span><br>' + primary.map(sk => `<span class="tag primary">${esc(sk)}</span>`).join('') + '</div>';
+                }
+                if (secondary.length) {
+                    html += '<div style="margin-bottom:10px"><span class="field-label">Secondary:</span><br>' + secondary.map(sk => `<span class="tag">${esc(sk)}</span>`).join('') + '</div>';
+                }
+                if (skills.length) {
+                    html += '<div><span class="field-label">All Skills (' + skills.length + '):</span>';
+                    html += '<table style="width:100%;margin-top:8px;font-size:0.85rem"><tr style="color:#64748b"><td>Skill</td><td>Months</td><td>Last Used</td><td>Related</td></tr>';
+                    skills.forEach(sk => {
+                        if (typeof sk === 'object') {
+                            html += `<tr><td style="color:#334155">${esc(sk.SkillName)}</td><td>${sk.SkillExperienceInMonths || ''}</td><td>${esc(sk.LastUsed || '')}</td><td>${(sk.RelevantSkills||[]).map(r=>esc(r)).join(', ')}</td></tr>`;
+                        } else {
+                            html += `<tr><td style="color:#334155">${esc(sk)}</td><td></td><td></td><td></td></tr>`;
+                        }
+                    });
+                    html += '</table></div>';
+                }
+                s.innerHTML += section('Skills', html);
+            }
+
+            // Certifications
+            const certs = r.Certifications || [];
+            if (certs.length) {
+                s.innerHTML += section('Certifications (' + certs.length + ')', certs.map(c => {
+                    if (typeof c === 'string') return `<div class="field-value">- ${esc(c)}</div>`;
+                    return `<div class="exp-item"><div class="exp-title">${esc(c.CertificationName || '')}</div><div class="exp-date">${esc(c.IssuerName || '')}${c.IssuedYear && c.IssuedYear !== null ? ' | ' + esc(c.IssuedYear) : ''}</div></div>`;
+                }).join(''));
+            }
+
+            // Projects
+            const projs = r.Projects || [];
+            if (projs.length) {
+                s.innerHTML += section('Projects (' + projs.length + ')', projs.map(p => `
+                    <div class="exp-item">
+                        <div class="exp-title">${esc(p.ProjectName || '')}</div>
+                        ${p.RoleInProject ? '<div class="exp-company">' + esc(p.RoleInProject) + (p.CompanyWorked ? ' @ ' + esc(p.CompanyWorked) : '') + '</div>' : ''}
+                        ${p.StartDate || p.EndDate ? '<div class="exp-date">' + esc(p.StartDate || '') + ' - ' + esc(p.EndDate || '') + '</div>' : ''}
+                        ${p.Description ? '<div class="field-value" style="margin-top:4px">' + esc(p.Description) + '</div>' : ''}
+                        ${(p.Technologies || []).length ? '<div style="margin-top:6px">' + p.Technologies.map(t => '<span class="tag">' + esc(t) + '</span>').join('') + '</div>' : ''}
+                        ${p.Link ? '<div style="margin-top:4px"><a href="' + esc(p.Link) + '" style="color:#2563eb">' + esc(p.Link) + '</a></div>' : ''}
+                    </div>
+                `).join(''));
+            }
+
+            // Achievements
+            const achs = r.Achievements || [];
+            if (achs.length) {
+                s.innerHTML += section('Achievements (' + achs.length + ')', achs.map(a => {
+                    if (typeof a === 'string') return `<div class="field-value">- ${esc(a)}</div>`;
+                    return `<div class="field-value">- ${esc(a.Description || a.Metric || JSON.stringify(a))}</div>`;
+                }).join(''));
+            }
+
+            // Languages
+            const langs = r.Languages || [];
+            if (langs.length) {
+                s.innerHTML += section('Languages', langs.map(l => `<span class="tag">${esc(l)}</span>`).join(''));
+            }
+
+            document.getElementById('result').style.display = 'block';
+        }
+
+        function section(title, content) {
+            return `<div class="section"><h3>${title}</h3>${content}</div>`;
+        }
+
+        function field(label, value) {
+            if (!value) return '';
+            return `<div class="field"><span class="field-label">${label}:</span> <span class="field-value">${esc(value)}</span></div>`;
+        }
+
+        function esc(s) {
+            if (!s) return '';
+            const d = document.createElement('div');
+            d.textContent = String(s);
+            return d.innerHTML;
+        }
+
+        function metaItem(label, val, cls) {
+            return `<div><span class="m-label">${label}:</span> <span class="m-val ${cls}">${esc(val)}</span></div>`;
+        }
+
+        function switchPane(name, el) {
+            document.querySelectorAll('.subtab').forEach(t => t.classList.remove('active'));
+            if (el) el.classList.add('active');
+            switchPaneById(name);
+            if (name === 'ats') renderAts();
+        }
+        function switchPaneById(name) {
+            document.querySelectorAll('.subpane').forEach(p => p.classList.remove('active'));
+            const pane = document.getElementById('pane-' + name);
+            if (pane) pane.classList.add('active');
+        }
+
+        // Client-side ATS field mapping (mirrors app.py ATS_FIELD_MAPS) so the
+        // engineering audience sees the integration payload without re-parsing.
+        const ATS_MAPS = {
+            bullhorn: { firstName:'PersonalDetails.FirstName', lastName:'PersonalDetails.LastName', email:'PersonalDetails.EmailID', phone:'PersonalDetails.PhoneNumber', address:'PersonalDetails.Location', occupation:'OverallSummary.CurrentJobRole', description:'OverallSummary.Summary', skillList:'PrimarySkills', educationDegree:'ListOfEducation[0].Degree', certifications:'Certifications' },
+            dice: { full_name:'PersonalDetails.FullName', email_address:'PersonalDetails.EmailID', phone_number:'PersonalDetails.PhoneNumber', location:'PersonalDetails.Location', current_title:'OverallSummary.CurrentJobRole', total_experience:'OverallSummary.TotalExperience', skills:'ListOfSkills', work_history:'ListOfExperiences', education:'ListOfEducation' },
+            ceipal: { CandidateName:'PersonalDetails.FullName', FirstName:'PersonalDetails.FirstName', LastName:'PersonalDetails.LastName', Email:'PersonalDetails.EmailID', Phone:'PersonalDetails.PhoneNumber', City:'PersonalDetails.Location', JobTitle:'OverallSummary.CurrentJobRole', Experience:'OverallSummary.TotalExperience', Skills:'PrimarySkills', Education:'ListOfEducation', Certifications:'Certifications' }
+        };
+        function resolvePath(obj, path) {
+            let cur = obj;
+            for (let part of path.split('.')) {
+                if (cur == null) return null;
+                const m = part.match(/^(\w+)\[(\d+)\]$/);
+                if (m) { cur = cur[m[1]]; if (!Array.isArray(cur)) return null; cur = cur[+m[2]]; }
+                else cur = cur[part];
+            }
+            return cur === undefined ? null : cur;
+        }
+        function renderAts() {
+            if (!lastResult) return;
+            const name = document.getElementById('atsSelect').value;
+            const map = ATS_MAPS[name]; const out = {};
+            for (const k in map) out[k] = resolvePath(lastResult, map[k]);
+            document.getElementById('atsContent').textContent = JSON.stringify(out, null, 2);
+        }
+
+        function copyText(id, btn) {
+            const txt = document.getElementById(id).textContent;
+            navigator.clipboard.writeText(txt).then(() => {
+                const old = btn.textContent; btn.textContent = 'Copied ✓';
+                setTimeout(() => btn.textContent = old, 1400);
+            });
+        }
+    </script>
+</body>
+</html>
