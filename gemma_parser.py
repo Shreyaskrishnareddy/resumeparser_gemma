@@ -662,8 +662,9 @@ def _parse_date(date_str):
 
 
 def _calc_months(start, end):
-    """Return integer months between two (year, month) tuples. Minimum 1."""
-    months = (end[0] - start[0]) * 12 + (end[1] - start[1])
+    """Return INCLUSIVE months between two (year, month) tuples (both endpoints
+    counted, the way recruiters read tenure: Aug-Dec = 5 months, not 4)."""
+    months = (end[0] - start[0]) * 12 + (end[1] - start[1]) + 1
     return max(months, 1)
 
 
@@ -717,6 +718,17 @@ def _fix_skill_experience(parsed):
         end_date_str = exp.get("EndDate", "")
         exp_data.append((text, months, end_date_str))
 
+    # Duration of the candidate's most-recent (current) role — used as the
+    # "derived from work history" estimate for listed skills that don't appear
+    # in any specific role's text.
+    current_role_months = 0
+    latest_role_end = None
+    for _text, _months, _end in exp_data:
+        pe = _parse_date(_end)
+        if pe and (latest_role_end is None or pe > latest_role_end):
+            latest_role_end = pe
+            current_role_months = _months
+
     for skill in skills:
         if not isinstance(skill, dict):
             continue
@@ -751,9 +763,20 @@ def _fix_skill_experience(parsed):
         if total_months > 0:
             skill["SkillExperienceInMonths"] = total_months
             if latest_end:
-                skill["LastUsed"] = f"{calendar.month_name[latest_end[1]]} {latest_end[0]}"
+                from datetime import date
+                today = date.today()
+                # If the most recent role using this skill is ongoing, say
+                # "Present" rather than today's date.
+                if latest_end >= (today.year, today.month):
+                    skill["LastUsed"] = "Present"
+                else:
+                    skill["LastUsed"] = f"{calendar.month_name[latest_end[1]]} {latest_end[0]}"
         else:
-            skill["SkillExperienceInMonths"] = None
+            # Skill listed but not traceable to a specific role — derive its
+            # experience from the current role's duration (it's a present-day
+            # competency) and mark LastUsed "Present".
+            skill["SkillExperienceInMonths"] = current_role_months or None
+            skill["LastUsed"] = "Present"
 
 
 def _fix_name_splitting(parsed):
@@ -1142,16 +1165,17 @@ def _fix_total_experience(parsed):
     if not intervals:
         return
 
-    # Merge overlapping/adjacent intervals, then sum their lengths.
+    # Merge overlapping or ADJACENT intervals (a job ending in month X and the
+    # next starting at X+1 is continuous), then sum INCLUSIVE lengths.
     intervals.sort()
     merged = [list(intervals[0])]
     for s, e in intervals[1:]:
-        if s <= merged[-1][1]:
+        if s <= merged[-1][1] + 1:
             merged[-1][1] = max(merged[-1][1], e)
         else:
             merged.append([s, e])
 
-    total_months = sum(e - s for s, e in merged)
+    total_months = sum(e - s + 1 for s, e in merged)
     total_months = max(total_months, 1)
     years = round(total_months / 12, 1)
     summary["TotalExperience"] = f"{years} years"
@@ -1267,6 +1291,14 @@ def _fix_overall_responsibilities(parsed):
     parsed["KeyResponsibilities"] = all_resps[:15]
 
 
+# Generic office/productivity tools — kept as skills but never "primary".
+_SECONDARY_TOOLS = {
+    "ms office", "microsoft office", "ms word", "word", "excel", "ms excel",
+    "powerpoint", "ms powerpoint", "outlook", "google docs", "google sheets",
+    "google slides", "google workspace", "g suite", "plan plus",
+}
+
+
 def _fix_skill_dedup_and_cap(parsed):
     """Deduplicate skills case-insensitively, split into Primary/Secondary, cap at 25."""
     skills = parsed.get("ListOfSkills")
@@ -1289,10 +1321,20 @@ def _fix_skill_dedup_and_cap(parsed):
         months = s.get("SkillExperienceInMonths")
         return months if isinstance(months, (int, float)) and months > 0 else -1
     deduped.sort(key=sort_key, reverse=True)
+    deduped = deduped[:25]
 
-    parsed["PrimarySkills"] = [s["SkillName"] for s in deduped[:20]]
-    parsed["SecondarySkills"] = [s["SkillName"] for s in deduped[20:]]
-    parsed["ListOfSkills"] = deduped[:25]
+    # Generic office/productivity tools are real skills but not "primary" — push
+    # them to Secondary so PrimarySkills stays a focused core-competency list.
+    primary, secondary = [], []
+    for s in deduped:
+        nm = s["SkillName"]
+        if nm.strip().lower() in _SECONDARY_TOOLS or len(primary) >= 12:
+            secondary.append(nm)
+        else:
+            primary.append(nm)
+    parsed["PrimarySkills"] = primary
+    parsed["SecondarySkills"] = secondary
+    parsed["ListOfSkills"] = deduped
 
 
 def _fix_cert_validation(parsed):
